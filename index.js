@@ -6,13 +6,27 @@ const csv = require('csv-parser');
 const fs = require('fs');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 
+dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-dotenv.config();
-const upload = multer({ dest: 'uploads/' });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = '/tmp/uploads';
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+const upload = multer({ storage });
 
 const companySchema = new mongoose.Schema({
   name: String,
@@ -24,16 +38,16 @@ const companySchema = new mongoose.Schema({
 const Company = mongoose.model('Company', companySchema);
 
 (async () => {
-    try {
-        await mongoose.connect(process.env.MONGO_URL, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        });
-        console.log('Connected to MongoDB');
-    } catch (error) {
-        console.error('Error connecting to MongoDB:', error);
-    }
-    })();
+  try {
+    await mongoose.connect(process.env.MONGO_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('Connected to MongoDB');
+  } catch (error) {
+    console.error('Error connecting to MongoDB:', error);
+  }
+})();
 
 const processFile = (filePath, isExcel) => {
   return new Promise((resolve, reject) => {
@@ -55,7 +69,6 @@ const processFile = (filePath, isExcel) => {
     }
   });
 };
-
 
 const importCompanies = async (companies, importMode) => {
   let inserted = 0, updated = 0, skipped = 0;
@@ -141,7 +154,6 @@ const importCompanies = async (companies, importMode) => {
   return { inserted, updated, skipped };
 };
 
-
 app.post('/api/companies/import', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -189,10 +201,9 @@ app.delete('/api/companies/:email', async (req, res) => {
       return res.status(404).json({ message: 'Company not found' });
     }
     res.json({ message: 'Company deleted successfully' });
-    } catch (error) {
+  } catch (error) {
     res.status(500).json({ message: error.message });
-    }
-}
-);
+  }
+});
 
 app.listen(5000, () => console.log('Server running on port 5000'));
